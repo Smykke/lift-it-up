@@ -1,0 +1,103 @@
+     1                                  segment code
+     2                                  ..start:
+     3 00000000 B8[0000]                    mov ax,data
+     4 00000003 8ED8                        mov ds,ax
+     5 00000005 B8[0000]                    mov ax,stack
+     6 00000008 8ED0                        mov ss,ax
+     7 0000000A BC[0001]                    mov sp,stacktop
+     8                                  
+     9 0000000D 31C0                            XOR     AX, AX
+    10 0000000F 8EC0                            MOV     ES, AX
+    11 00000011 26A12400                        MOV     AX, [ES:int9*4];carregou AX com offset anterior
+    12 00000015 A3[0200]                        MOV     [offset_dos], AX        ; offset_dos guarda o end. para qual ip de int 9 estava apontando anteriormente
+    13 00000018 26A12600                        MOV     AX, [ES:int9*4+2]     ; cs_dos guarda o end. anterior de CS
+    14 0000001C A3[0000]                        MOV     [cs_dos], AX
+    15 0000001F FA                              CLI
+    16 00000020 268C0E2600                      MOV     [ES:int9*4+2], CS
+    17 00000025 26C7062400[9300]                MOV     WORD [ES:int9*4],keyint
+    18 0000002C FB                              STI
+    19                                  
+    20                                  L1:
+    21 0000002D A1[0D00]                        mov     ax,[p_i]
+    22 00000030 3B06[0F00]                      CMP     ax,[p_t]
+    23 00000034 74F7                            JE      L1
+    24 00000036 FF06[0F00]                      inc     word[p_t]
+    25 0000003A 8126[0F00]0700                  and     word[p_t],7
+    26 00000040 8B1E[0F00]                      mov     bx,[p_t]
+    27 00000044 31C0                            XOR     AX, AX
+    28 00000046 8A87[0500]                      MOV     AL, [bx+tecla]
+    29 0000004A A2[0400]                        mov     [tecla_u],al
+    30 0000004D B310                            MOV     BL, 16
+    31 0000004F F6F3                            DIV     BL
+    32 00000051 0430                            ADD     Al, 30h
+    33 00000053 3C3A                            CMP     AL, 3Ah
+    34 00000055 7202                            JB      continua
+    35 00000057 0407                            ADD     AL, 07h
+    36                                  
+    37                                  continua:
+    38 00000059 A2[1100]                        MOV     [teclasc], AL
+    39 0000005C 80C430                          ADD     AH, 30h
+    40 0000005F 80FC3A                          CMP     AH, 3Ah
+    41 00000062 7203                            JB      continua1
+    42 00000064 80C407                          ADD     AH, 07h
+    43                                  
+    44                                  continua1:
+    45 00000067 8826[1200]                      MOV     [teclasc+1], AH
+    46 0000006B BA[1100]                        MOV     DX,teclasc
+    47 0000006E B409                            MOV     AH, 9 ;imprimir string dos
+    48 00000070 CD21                            int     21h
+    49 00000072 803E[0400]81                    CMP     BYTE [tecla_u], 81h
+    50 00000077 7403                            JE      L2
+    51 00000079 E9B1FF                          JMP     L1
+    52                                  
+    53                                  L2:
+    54 0000007C FA                              CLI
+    55 0000007D 31C0                            XOR     AX, AX
+    56 0000007F 8EC0                            MOV     ES, AX
+    57 00000081 A1[0000]                        MOV     AX, [cs_dos]
+    58 00000084 26A32600                        MOV     [ES:int9*4+2], AX
+    59 00000088 A1[0200]                        MOV     AX, [offset_dos]
+    60 0000008B 26A32400                        MOV     [ES:int9*4], AX
+    61 0000008F B44C                            MOV     AH, 4Ch
+    62 00000091 CD21                            int     21h
+    63                                  
+    64                                  
+    65                                  keyint:
+    66 00000093 50                              PUSH    AX
+    67 00000094 53                              push    bx
+    68 00000095 1E                              push    ds
+    69 00000096 B8[0000]                        mov     ax,data
+    70 00000099 8ED8                            mov     ds,ax
+    71 0000009B E460                            IN      AL, kb_data
+    72 0000009D FF06[0D00]                      inc     WORD [p_i]
+    73 000000A1 8126[0D00]0700                  and     WORD [p_i],7
+    74 000000A7 8B1E[0D00]                      mov     bx,[p_i]
+    75 000000AB 8887[0500]                      mov     [bx+tecla],al
+    76 000000AF E461                            IN      AL, kb_ctl
+    77 000000B1 0C80                            OR      AL, 80h
+    78 000000B3 E661                            OUT     kb_ctl, AL
+    79 000000B5 247F                            AND     AL, 7Fh
+    80 000000B7 E661                            OUT     kb_ctl, AL
+    81 000000B9 B020                            MOV     AL, eoi
+    82 000000BB E620                            OUT     pictrl, AL
+    83 000000BD 1F                              pop     ds
+    84 000000BE 5B                              pop     bx
+    85 000000BF 58                              POP     AX
+    86 000000C0 CF                              IRET
+    87                                  
+    88                                  segment data
+    89                                          kb_data EQU 60h  ;PORTA DE LEITURA DE TECLADO
+    90                                          kb_ctl  EQU 61h  ;PORTA DE RESET PARA PEDIR NOVA INTERRUPCAO
+    91                                          pictrl  EQU 20h
+    92                                          eoi     EQU 20h
+    93                                          int9    EQU 9h
+    94 00000000 0100                            cs_dos  DW  1
+    95 00000002 0100                            offset_dos  DW 1
+    96 00000004 00                              tecla_u db 0
+    97 00000005 <res 00000008>                  tecla   resb  8
+    98 0000000D 0000                            p_i     dw  0   ;ponteiro p/ interrupcao (qnd pressiona tecla)
+    99 0000000F 0000                            p_t     dw  0   ;ponterio p/ interrupcao ( qnd solta tecla)
+   100 00000011 00000D0A24                      teclasc DB  0,0,13,10,'$'
+   101                                  segment stack stack
+   102 00000000 <res 00000100>              resb 256
+   103                                  stacktop:

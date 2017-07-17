@@ -1,0 +1,167 @@
+     1                                  segment code
+     2                                  ..start:
+     3 00000000 B8[0000]                    mov ax,data
+     4 00000003 8ED8                        mov ds,ax
+     5 00000005 B8[0000]                    mov ax,stack
+     6 00000008 8ED0                        mov ss,ax
+     7 0000000A BC[0001]                    mov sp,stacktop
+     8                                  
+     9                                  ; Obs: [int9*4] = IP  ; [int9*4+2] = CS
+    10                                  ; https://en.wikibooks.org/wiki/X86_Assembly/Advanced_Interrupts#The_Interrupt_Vector_Table
+    11                                  
+    12 0000000D 31C0                            XOR     AX, AX  ; zera o AX
+    13 0000000F 8EC0                            MOV     ES, AX  ; Faz o ES [Extra Segment Register] apontar para 0h, que é o espaço reservado para vetores de interrupção
+    14                                  ; Salvando o segmento antigo
+    15 00000011 26A12400                        MOV     AX, [ES:int9*4] ; AX recebe o endereço antigo da próxima instrução [IP - Instruction Pointer] (que INT 9h estava apontando)
+    16 00000015 A3[0200]                        MOV     [offset_dos], AX  ; Esse endereço é guardado em offset_dos
+    17 00000018 26A12600                        MOV     AX, [ES:int9*4+2] ; AX recebe o endereço antigo de CS (que estava sendo apontado por INT 9h)
+    18 0000001C A3[0000]                        MOV     [cs_dos], AX  ; Esse endereço é guardado em cs_dos
+    19 0000001F FA                              CLI     ; Clear Interruption Flag - faz o processador ignorar as interrupções mascaradas
+    20                                  ; Substituindo a tabela da BIOS pela nossa tabela
+    21 00000020 268C0E2600                      MOV     [ES:int9*4+2], CS ; Guarda o CS como nova próxima instrução depois da interrupção
+    22 00000025 26C7062400[E900]                MOV     WORD [ES:int9*4],keyint ; Salva a nova sequência de tratamento de interrupção
+    23 0000002C FB                              STI     ; Set Interruption Flag - ativa as interrupções
+    24                                  
+    25                                  L1:
+    26 0000002D A1[0D00]                        mov     ax,[p_i]  ; pont p/ int quando pressiona a tecla
+    27 00000030 3B06[0F00]                      CMP     ax,[p_t]  ; verifica se soltou a tecla
+    28 00000034 74F7                            JE      L1  ; se soltou, permanece no loop
+    29 00000036 FF06[0F00]                      inc     word[p_t] ; se a tecla estiver pressionada, incrementa
+    30 0000003A 8126[0F00]0700                  and     word[p_t],7 ; pega os três últimos bits de [p_t]
+    31 00000040 8B1E[0F00]                      mov     bx,[p_t]
+    32 00000044 31C0                            XOR     AX, AX  ; zera AX
+    33 00000046 8A87[0500]                      MOV     AL, [bx+tecla]  ;
+    34 0000004A A2[0400]                        mov     [tecla_u],al ; Recebe o código da tecla (depois de solta)
+    35                                  
+    36 0000004D 803E[0400]81                    CMP     BYTE [tecla_u], 81h ; 81h é o código gerado ao soltar a tecla ESC
+    37 00000052 7434                            JE      emergencia_on  ; Liga a emergencia
+    38 00000054 803E[0400]A2                    CMP     BYTE [tecla_u], 0A2H ; Codigo da letra G
+    39 00000059 7436                            JE      emergencia_off ; Desliga a emergencia
+    40 0000005B 803E[0400]B9                    CMP     BYTE [tecla_u], 0B9h ; Codigo da barra de espaco
+    41 00000060 7438                            JE      interrompe_elevador ; Para calibracao
+    42 00000062 803E[0400]82                    CMP     BYTE [tecla_u], 82h; Codigo do 1
+    43 00000067 743A                            JE      binter_1  ; Botao interno 1
+    44 00000069 803E[0400]83                    CMP     BYTE [tecla_u], 83h; Codigo do 2
+    45 0000006E 743C                            JE      binter_2  ; Botao interno 2
+    46 00000070 803E[0400]84                    CMP     BYTE [tecla_u], 84h; Codigo do 3
+    47 00000075 743E                            JE      binter_3  ; Botao interno 3
+    48 00000077 803E[0400]85                    CMP     BYTE [tecla_u], 85h; Codigo do 4
+    49 0000007C 7440                            JE      binter_4  ; Botao interno 4
+    50 0000007E 803E[0400]90                    CMP     BYTE [tecla_u], 90h;  Codigo da letra Q
+    51 00000083 7447                            JE      sair
+    52 00000085 E9A5FF                          JMP     L1
+    53                                  
+    54                                  emergencia_on:
+    55 00000088 BA[2E00]                        MOV  DX, int_esc
+    56 0000008B E83900                          call imprime
+    57 0000008E E99CFF                          JMP L1
+    58                                  
+    59                                  emergencia_off:
+    60 00000091 BA[4700]                        MOV DX, int_g
+    61 00000094 E83000                          call imprime
+    62 00000097 E993FF                          JMP L1
+    63                                  
+    64                                  interrompe_elevador:
+    65 0000009A BA[6200]                        MOV DX, int_barra
+    66 0000009D E82700                          call imprime
+    67 000000A0 E98AFF                          JMP L1
+    68                                  binter_1:
+    69 000000A3 BA[8000]                        MOV DX, int_binter1
+    70 000000A6 E81E00                          call imprime
+    71 000000A9 E981FF                          JMP L1
+    72                                  binter_2:
+    73 000000AC BA[9200]                        MOV DX, int_binter2
+    74 000000AF E81500                          call imprime
+    75 000000B2 E978FF                          JMP L1
+    76                                  binter_3:
+    77 000000B5 BA[A400]                        MOV DX, int_binter3
+    78 000000B8 E80C00                          call imprime
+    79 000000BB E96FFF                          JMP L1
+    80                                  binter_4:
+    81 000000BE BA[B600]                        MOV DX, int_binter4
+    82 000000C1 E80300                          call imprime
+    83 000000C4 E966FF                          JMP L1
+    84                                  
+    85                                  imprime:
+    86 000000C7 B409                            MOV     AH, 9 ; coloca a função de imprimir DX no INT 21h
+    87 000000C9 CD21                            int     21h ; imprime o conteúdo de DX (teclasc)
+    88 000000CB C3                              RET
+    89                                  
+    90                                  sair: ; Restaura a tabela de interrupção da BIOS
+    91 000000CC BA[1600]                        MOV     DX, int_o
+    92 000000CF E8F5FF                          call imprime
+    93 000000D2 FA                              CLI
+    94 000000D3 31C0                            XOR     AX, AX
+    95 000000D5 8EC0                            MOV     ES, AX
+    96 000000D7 A1[0000]                        MOV     AX, [cs_dos]
+    97 000000DA 26A32600                        MOV     [ES:int9*4+2], AX
+    98 000000DE A1[0200]                        MOV     AX, [offset_dos]
+    99 000000E1 26A32400                        MOV     [ES:int9*4], AX
+   100 000000E5 B44C                            MOV     AH, 4Ch ; Retorna o controle para o sistema (finaliza o programa)
+   101 000000E7 CD21                            int     21h
+   102                                  
+   103                                  
+   104                                  keyint:
+   105                                  ; Guarda os valores antigos
+   106 000000E9 50                              PUSH    AX
+   107 000000EA 53                              push    bx
+   108 000000EB 1E                              push    ds
+   109                                  ; Define os novos
+   110 000000EC B8[0000]                        mov     ax,data ; segment data
+   111 000000EF 8ED8                            mov     ds,ax
+   112 000000F1 E460                            IN      AL, kb_data ; Lê do teclado
+   113 000000F3 FF06[0D00]                      inc     WORD [p_i]  ; incrementa quando pressiona a tecla
+   114 000000F7 8126[0D00]0700                  and     WORD [p_i],7
+   115 000000FD 8B1E[0D00]                      mov     bx,[p_i] ; Coloca os três primeiros bits de [p_i] em BX
+   116 00000101 8887[0500]                      mov     [bx+tecla],al ; Guarda o código da tecla pressionada
+   117 00000105 E461                            IN      AL, kb_ctl
+   118 00000107 0C80                            OR      AL, 80h ; Pega os 4 últimos bits de AL
+   119 00000109 E661                            OUT     kb_ctl, AL
+   120 0000010B 247F                            AND     AL, 7Fh ; Pega os 7 primeiros bits de AL
+   121 0000010D E661                            OUT     kb_ctl, AL
+   122 0000010F B020                            MOV     AL, eoi
+   123 00000111 E620                            OUT     pictrl, AL
+   124                                  ; Restaura os valores anteriores
+   125 00000113 1F                              pop     ds
+   126 00000114 5B                              pop     bx
+   127 00000115 58                              POP     AX
+   128 00000116 CF                              IRET
+   129                                  
+   130                                  segment data
+   131                                          kb_data EQU 60h  ;PORTA DE LEITURA DE TECLADO - pega o código da tecla
+   132                                          kb_ctl  EQU 61h  ;PORTA DE RESET PARA PEDIR NOVA INTERRUPCAO
+   133                                          pictrl  EQU 20h  ; finaliza operação do sistema
+   134                                          eoi     EQU 20h   ; finaliza operação do sistema
+   135                                          int9    EQU 9h  ; 09h é interrupção de teclado
+   136 00000000 0100                            cs_dos  DW  1
+   137 00000002 0100                            offset_dos  DW 1
+   138 00000004 00                              tecla_u db 0
+   139 00000005 <res 00000008>                  tecla   resb  8
+   140 0000000D 0000                            p_i     dw  0   ;ponteiro p/ interrupcao (qnd pressiona tecla)
+   141 0000000F 0000                            p_t     dw  0   ;ponterio p/ interrupcao ( qnd solta tecla)
+   142 00000011 00000D0A24                      teclasc DB  0,0,13,10,'$'
+   143 00000016 4F3A207361696E646F-             int_o   DB  'O: saindo do programa', 13, 10, '$'
+   144 0000001F 20646F2070726F6772-
+   145 00000028 616D610D0A24       
+   146 0000002E 4553433A20656D6572-             int_esc    DB  'ESC: emergencia ligado', 13, 10, '$'
+   147 00000037 67656E636961206C69-
+   148 00000040 6761646F0D0A24     
+   149 00000047 473A20656D65726765-             int_g    DB  'G: emergencia desativado', 13, 10, '$'
+   150 00000050 6E6369612064657361-
+   151 00000059 74697661646F0D0A24 
+   152 00000062 424152524120444520-             int_barra  DB  'BARRA DE ESPACO: calibracao', 13, 10, '$'
+   153 0000006B 45535041434F3A2063-
+   154 00000074 616C6962726163616F-
+   155 0000007D 0D0A24             
+   156 00000080 426F74616F20696E74-             int_binter1  DB  'Botao interno 1', 13, 10, '$'
+   157 00000089 65726E6F20310D0A24 
+   158 00000092 426F74616F20696E74-             int_binter2  DB  'Botao interno 2', 13, 10, '$'
+   159 0000009B 65726E6F20320D0A24 
+   160 000000A4 426F74616F20696E74-             int_binter3  DB  'Botao interno 3', 13, 10, '$'
+   161 000000AD 65726E6F20330D0A24 
+   162 000000B6 426F74616F20696E74-             int_binter4  DB  'Botao interno 4', 13, 10, '$'
+   163 000000BF 65726E6F20340D0A24 
+   164                                  
+   165                                  segment stack stack
+   166 00000000 <res 00000100>              resb 256
+   167                                  stacktop:
