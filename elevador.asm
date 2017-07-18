@@ -38,7 +38,6 @@ segment code
         sti     ; Set Interruption Flag - ativa as interrupções
 
 ;--------------------------------------------------	MACROS------------------------------------------------------
-;%include "line.asm"
 %macro linha 5 		
 		mov		ax,%1 ;x
 		push	ax
@@ -72,125 +71,57 @@ segment code
 ;;---------------------------------------------------PROGRAMA PRINCIPAL--------------------------------------;;		
 
 		call moldura
-		call calibra
+		call calibraele
 		call desenha_interface ;;colocar isso dentro do loop infinito??
+; enquanto:		
+; 		mov     ax,[p_i]  ; pont p/ int quando pressiona a tecla
+;         cmp     ax,[p_t]  ; verifica se soltou a tecla
+;         je      enquanto ; se soltou, permanece no loop
+;         inc     word[p_t] ; se a tecla estiver pressionada, incrementa
+;         and     word[p_t],7 ; pega os três últimos bits de [p_t]
+;         mov     bx,[p_t]
+;         xor     ax, ax  ; zera AX
+;         mov     al, [bx+tecla]  ;
+;         mov     [tecla_u],al ; Recebe o código da tecla (depois de solta)
 
-while_!q:
-		mov     ax,[p_i]  ; pont p/ int quando pressiona a tecla
-        cmp     ax,[p_t]  ; verifica se soltou a tecla
-        je      while_!q ; se soltou, permanece no loop
-        inc     word[p_t] ; se a tecla estiver pressionada, incrementa
-        and     word[p_t],7 ; pega os três últimos bits de [p_t]
-        mov     bx,[p_t]
-        xor     ax, ax  ; zera AX
-        mov     al, [bx+tecla]  ;
-        mov     [tecla_u],al ; Recebe o código da tecla (depois de solta)
+;         cmp     byte [tecla_u], 0A2H ; Codigo da letra G
+;         je      emergencia_off ; Desliga a emergencia
+;         cmp     byte [emodo], 1 ;se esta em emergencia
+;         je      enquanto ; Se estiver em estado de emergencia, fica no loop ate voltar ao normal (apertar a tecla G)
+;         cmp     byte [tecla_u], 81h ; 81h é o código gerado ao soltar a tecla ESC
+;         je      emergencia_on  ; Liga a emergencia
+;         ;call    verifica_botao_interno
+;         ;call    verifica_botao_externo
+;         ;call    atualiza_setas ;;funcao que liga as setas dos botoes externos correspondentes
+;         ;call     andar_atual ;;funcao que decide em qual andar o elevador está
+;         cmp     byte [tecla_u], 90h;  Codigo da letra Q
+;         je      sair
+;         jmp     enquanto
 
-        cmp     byte [tecla_u], 0A2H ; Codigo da letra G
-        je      emergencia_off ; Desliga a emergencia
-        cmp     byte [status], 2
-        je      while_!q  ; Se estiver em estado de emergencia, fica no loop ate voltar ao normal (apertar a tecla G)
-        cmp     byte [tecla_u], 81h ; 81h é o código gerado ao soltar a tecla ESC
-        je      emergencia_on  ; Liga a emergencia
-        call    verifica_botao_interno
-        ;cmp     byte [tecla_u], 0B9h ; Codigo da barra de espaco ;;comentei porque esta na funcao calibra
-        ;je      interrompe_elevador ; Para calibracao
-        ; cmp     byte [tecla_u], 82h; Codigo do 1
-        ; je      binter_1  ; Botao interno 1
-        ; cmp     byte [tecla_u], 83h; Codigo do 2
-        ; je      binter_2  ; Botao interno 2
-        ; cmp     byte [tecla_u], 84h; Codigo do 3
-        ; je      binter_3  ; Botao interno 3
-        ; cmp     byte [tecla_u], 85h; Codigo do 4
-        ; je      binter_4  ; Botao interno 4
-        cmp     byte [tecla_u], 90h;  Codigo da letra Q
-        je      sair
-        jmp     while_!q
+; emergencia_on:
+;         mov byte [emodo], 1 
+;         jmp enquanto
 
-emergencia_on:
-        mov byte [status], 0003h
-        mov  dx, int_esc
-        call imprime
-        ; mov dx, [status]  ; conferir o resultado
-        ; call imprime_byte
-        jmp while_!q
+; emergencia_off:
+;         mov byte [emodo], 0 ;parado
+;         jmp enquanto
 
-emergencia_off:
-        mov byte [status], 01h ; 'subindo' < alterar depois
-        mov dx, int_g
-        call imprime
-        jmp while_!q
+; sair: ; Restaura a tabela de interrupção da BIOS
+;         ;;mov     dx, int_o
+;         ;;call imprime
+;         mov  	ah,0   						; set video mode
+; 		mov  	al,byte[modo_anterior]   	; modo anterior
+; 		int  	10h 
 
-; interrompe_elevador:
-;         mov byte [status], 00h ; parado
-;         mov dx, int_barra
-;         call imprime
-;         ; mov dx, [status]
-;         ; call imprime_byte
-;         jmp L1
-
-; binter_1:
-;         add byte [botoes_internos], 01h
-;         mov dx, int_binter1
-;         call imprime
-;         ; mov dx, [botoes_internos]
-;         ; call imprime_byte
-;         jmp while_!q
-
-; binter_2:
-;         add byte [botoes_internos], 02h
-;         mov dx, int_binter2
-;         call imprime
-;         jmp while_!q
-
-; binter_3:
-;         add byte [botoes_internos], 03h
-;         mov dx, int_binter3
-;         call imprime
-;         jmp while_!q
-
-; binter_4:
-;         add byte [botoes_internos], 04h
-;         mov dx, int_binter4
-;         call imprime
-;         jmp while_!q
-
-
-imprime:
-        mov     ah, 9 ; coloca a função de imprimir DX no INT 21h
-        int     21h ; imprime o conteúdo de DX (teclasc)
-        ret
-
-imprime_byte:
-        add dl, '0' ; Transforma o byte em caractere
-        mov ah, 2
-        int 21h
-        mov dl, 13
-        int 21h
-        mov dl, 10
-        int 21h
-        ret
-
-sair: ; Restaura a tabela de interrupção da BIOS
-        mov     dx, int_o
-        call imprime
-        cli
-        xor     ax, ax
-        mov     es, ax
-        mov     ax, [cs_dos]
-        mov     [es:int9*4+2], ax
-        mov     ax, [offset_dos]
-        mov     [es:int9*4], ax
-        mov     ah, 4Ch ; Retorna o controle para o sistema (finaliza o programa)
-        int     21h
-
-    	;mov    	ah,08h
-  		;int     21h
-	  	;mov  	ah,0   					; set video mode
-	  	;mov  	al,[modo_anterior]   	; modo anterior
-	    ;int  	10h
-  		;mov     ax,4c00h
-  		;int     21h
+;         cli
+;         xor     ax, ax
+;         mov     es, ax
+;         mov     ax, [cs_dos]
+;         mov     [es:int9*4+2], ax
+;         mov     ax, [offset_dos]
+;         mov     [es:int9*4], ax
+;         mov     ah, 4Ch ; Retorna o controle para o sistema (finaliza o programa)
+;         int     21h
   		
 
 
@@ -207,23 +138,22 @@ verifica_botao_interno:
 
 		cmp     byte [tecla_u], 82h; Codigo do 1
         jne     bi2
-        mov     byte[ibotao1], 1
+        add 	byte [botoes_internos], 01h
 
-        ;;je      binter_1  ; Botao interno 1
 bi2:   
  		cmp     byte [tecla_u], 83h; Codigo do 2
         jne     bi3  ; Botao interno 2
-        mov     byte[ibotao2], 1;
+        add 	byte [botoes_internos], 02h
 
 bi3
         cmp     byte [tecla_u], 84h; Codigo do 3
         jne     bi4 ; Botao interno 3
-        mov     byte[ibotao3], 1
+        add 	byte [botoes_internos], 04h
 
 bi4:        
         cmp     byte [tecla_u], 85h; Codigo do 4
         jne     saiibotao  ; Botao interno 4
-        mov     byte[ibotao4], 1
+        add 	byte [botoes_internos], 08h
 
 saiibotao:
 		popf
@@ -247,37 +177,37 @@ moldura:
 		ret
 ;------------------------------------------------------------------------------------------------------------------------------------
 
-;;Funcao que calibra o elevador, colocando-o na posicao inicial, 4 andar
-calibra:
+;Funcao que calibra o elevador, colocando-o na posicao inicial, 4 andar
+calibraele:
 		pusha
 		pushf
-		mov     byte[init], 0
+		mov     byte[init], 00h
 		call    escreve_mens_temp
-		mov     dx, 318h                    ;move endereco da porta de saida para dx  
-        xor		al,al						;zera al
-		out		dx,al	                    ;poe 0 na porta 318h
-		mov		dx,319h						;move endereco da porta de entrada 319h(botoesexternos) para dx
-		;inc		al							;PRECISA DISSO?????;Apaga o LED da porta 319H e define a porta 318H como porta de saída
-		out		dx,al						;al passa par dx
-		mov		dx,318h						;move a saida para dx 	
-		mov		al,40h                      ;Comando que manda o elevador SUBIR
-		out		dx,al	
+		; mov     dx, 318h                    ;move endereco da porta de saida para dx  
+  ;       xor		al,al						;zera al
+		; out		dx,al	                    ;poe 0 na porta 318h
+		; mov		dx,319h						;move endereco da porta de entrada 319h(botoesexternos) para dx
+		; ;inc		al							;PRECISA DISSO?????;Apaga o LED da porta 319H e define a porta 318H como porta de saída
+		; out		dx,al						;al passa par dx
+		; mov		dx,318h						;move a saida para dx 	
+		; mov		al,40h                      ;Comando que manda o elevador SUBIR
+		; out		dx,al	
 l18:    
 		cmp     byte[tecla_u], 0B9h ; aguarda ate ser pressionada a tecla espaco para sinalizar que chegou no quarto andar
 		jne     l18
-		mov     byte[contador], 267         ;salvar no contador de giros que chegou no quarto andar 3*89
-		mov     dx, 318h
-		mov     al, 80h
-		out     dx, al                      ;sinal para o elevador descer 
-l19:
-		;aguarda condicao x
-		jne 	l19
+		; mov     word[contador], 267         ;salvar no contador de giros que chegou no quarto andar 3*89
+		; mov     dx, 318h
+		; mov     al, 80h
+		; out     dx, al                      ;sinal para o elevador descer 
+; l19:
+; 		;aguarda condicao x
+; 		jne 	l19
 
-		mov     dx, 318h
-		mov     al, 00h                     ;sinal para o elevador parar
-		out     dx, al
+		; mov     dx, 318h
+		; mov     al, 00h                     ;sinal para o elevador parar
+		; out     dx, al
 		mov 	byte[status], 0             ;variavel de estado do elevador recebe 0 = parado
-		mov     byte[init], 1
+		mov     byte[init], 11h
 		call    escreve_mens_temp
 		popf
 		popa
@@ -288,14 +218,15 @@ l19:
 escreve_mens_temp:
 		pusha
 		pushf
-		;;Calibrando elevador
+		;;imprime Calibrando elevador
 		mov     cx, 22
       	mov     bx, 0
       	mov     dh, 11 ;0-29 vertical
       	mov 	dl, 31 ;0-079 horizontal
-      	cmp     byte[init], 0
+      	cmp     byte[init], 00h
       	jne     cor_preto ;;se estiver saido da tela de inicio
       	mov     byte[cor], branco_intenso
+      	jmp     l1
 
 cor_preto:
       	mov		byte[cor], preto 
@@ -306,14 +237,16 @@ l1:
       	inc 	bx
       	inc 	dl
       	loop    l1
-		;Aperte ESPACO no quarto andar
+		
+		;imprime Aperte ESPACO no quarto andar
 		mov     cx, 29
       	mov     bx, 0
       	mov     dh, 12 ;0-29 vertical
       	mov 	dl, 27 ;0-079 horizontal
-      	cmp     byte[init], 0
+      	cmp     byte[init], 00h
       	jne     cor_preto2
       	mov		byte[cor], branco_intenso
+      	jmp     l2
 
 cor_preto2:
 		mov     byte[cor], preto			
@@ -908,7 +841,7 @@ line32:
 		cmp		ax,[deltay]
 		pop		ax
 		jb		line5
-
+;;;
 	; cx > ax e deltax>deltay
 		push	cx
 		sub		cx,ax
@@ -1012,7 +945,7 @@ fim_line:
 
 ;;----------------------------------------------------FIM FUNCOES DO ARQUIVO LINEC.ASM-----------------------------------------;;		
 
-;;---------------------------------------------------FUNCAO KEYINT DO ARQUIVO TECBUF.ASM---------------------------------------;;
+; ;;---------------------------------------------------FUNCAO KEYINT DO ARQUIVO TECBUF.ASM---------------------------------------;;
 keyint:
 ; Guarda os valores antigos
         push    ax
@@ -1076,19 +1009,14 @@ tecla            resb   8
 p_i              dw     0   ;ponteiro p/ interrupcao (qnd pressiona tecla)
 p_t              dw     0   ;ponterio p/ interrupcao ( qnd solta tecla)
 teclasc          db     0,0,13,10,'$'
-status           db     0 ; 0: parado; 1: descendo; 2: subindo; 3: emergencia ativado
-int_o            db     'Q: saindo do programa', 13, 10, '$'
-int_esc          db     'ESC: emergencia ligado', 13, 10, '$'
-int_g            db     'G: emergencia desativado', 13, 10, '$'
-int_barra        db     'BARRA DE ESPACO: calibracao', 13, 10, '$'
-int_binter1      db     'Botao interno 1', 13, 10, '$'
-int_binter2      db     'Botao interno 2', 13, 10, '$'
-int_binter3      db     'Botao interno 3', 13, 10, '$'
-int_binter4      db     'Botao interno 4', 13, 10, '$'
+
+
+
+status           db     0 ; 0: parado; 1: descendo; 2: subindo; 
+emodo            db     0 ;0=funcionando 1=emergencia
 botoes_externos  db     00h ; 0001: B1 | 0010: B2 | 0100: B3 | 0100: B4 | 0001 0000: B5 | 0010 0000: B6
 botoes_internos  db     00h ; 0001: I1 | 0010: I2 | 0100: I3 | 0100: I4
-
-contador         db     0
+contador         dw     0
 init             db     0 ;;byte para determinar se ja saiu da tela de inicio 0 = nao, 1 = sim
 
 ;;botoes internos 
