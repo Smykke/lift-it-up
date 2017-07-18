@@ -1,38 +1,55 @@
-; vers�o de 10/05/2007
-; corrigido erro de arredondamento na rotina line.
-; circle e full_circle disponibilizados por Jefferson Moro em 10/2009
-;
+;;--------------------------------------------------- SISTEMAS EMBARCADOS I - 2017/1---------------------------;;
+;;---------------------------------------------------------PROJETO:O ELEVADOR----------------------------------;;
+;;-------------------------------------------------------------------------------------------------------------;;
+;;-------------------------------------------------------EMILIA FRIGERIO CREMASCO------------------------------;;
+;;--------------------------------------------------------MARCELA FREITAS VIEIRA-------------------------------;;
+;;-------------------------------------------------------MARCELO BRINGUENTI PEDRO------------------------------;;
+;;-------------------------------------------------------------------------------------------------------------;;
+;;OBS: MAQUETE UTILIZADA: ELEVADOR DE ACRILICO ANTIGO----------------------------------------------------------;;
 segment code
 ..start:
-    		mov 		ax,data
-    		mov 		ds,ax
-    		mov 		ax,stack
-    		mov 		ss,ax
-    		mov 		sp,stacktop
+		mov 		ax,data
+		mov 		ds,ax
+		mov 		ax,stack
+		mov 		ss,ax
+		mov 		sp,stacktop
 
-; salvar modo corrente de video(vendo como esta o modo de video da maquina)
-            mov  		ah,0Fh
-    		int  		10h
-    		mov  		[modo_anterior],al
+; Salvar modo corrente de video(vendo como esta o modo de video da maquina)
+        mov  		ah,0Fh
+		int  		10h
+		mov  		[modo_anterior],al
 
-; alterar modo de video para grafico 640x480 16 cores
+; Alterar modo de video para grafico 640x480 16 cores
     	mov     	al,12h
    		mov     	ah,0
     	int     	10h
+; Interrrupcao do teclado
+  		xor     ax, ax  ; zera o AX
+        mov     es, ax  ; Faz o ES [Extra Segment Register] apontar para 0h, que é o espaço reservado para vetores de interrupção
+; Salvando o segmento antigo
+        mov     ax, [es:int9*4] ; AX recebe o endereço antigo da próxima instrução [IP - Instruction Pointer] (que INT 9h estava apontando)
+        mov     [offset_dos], ax  ; Esse endereço é guardado em offset_dos
+        mov     ax, [es:int9*4+2] ; AX recebe o endereço antigo de CS (que estava sendo apontado por INT 9h)
+        mov     [cs_dos], ax  ; Esse endereço é guardado em cs_dos
+        cli     ; Clear Interruption Flag - faz o processador ignorar as interrupções mascaradas
+; Substituindo a tabela da BIOS pela nossa tabela
+        mov     [es:int9*4+2], cs ; Guarda o CS como nova próxima instrução depois da interrupção
+        mov     WORD [es:int9*4],keyint ; Salva a nova sequência de tratamento de interrupção
+        sti     ; Set Interruption Flag - ativa as interrupções
 
 ;--------------------------------------------------	MACROS------------------------------------------------------
 ;%include "line.asm"
 %macro linha 5 		
-	mov		ax,%1 ;x
-	push	ax
-	mov		ax,%2 ;y
-	push	ax
-	mov		ax,%3 ;x
-	push	ax
-	mov		ax,%4 ;y
-	push	ax
-	mov		byte[cor],%5
-	call	line
+		mov		ax,%1 ;x
+		push	ax
+		mov		ax,%2 ;y
+		push	ax
+		mov		ax,%3 ;x
+		push	ax
+		mov		ax,%4 ;y
+		push	ax
+		mov		byte[cor],%5
+		call	line
 %endmacro  
 
 %macro escreve_palavra 6	;caracteres, dh,dl,nome,loop, cor
@@ -52,210 +69,409 @@ segment code
 
 ;--------------------------------------------------------FIM MACROS------------------------------------------;;	
 
+;;---------------------------------------------------PROGRAMA PRINCIPAL--------------------------------------;;		
 
-;;------------------------------------------------CALIBRANDO-------------------------------------------------;;
-; escreve_palavra 22, 11, 31, calibra, l1, branco_intenso
-; ;escreve_palavra 29, 12, 27, espaco, l2, branco_intenso
+		call moldura
+		call calibra
+		call desenha_interface ;;colocar isso dentro do loop infinito??
 
-; ;;-----------------------------------------------------ANDAR------------------------------------------------;;
-escreve_palavra 12, 2, 3, andar, l8, branco_intenso
-escreve_palavra 1, 2, 16, um, l11, branco_intenso
-;escreve_palavra 1, 2, 16, dois, l11, branco_intenso
-;escreve_palavra 1, 2, 16, tres, l11, branco_intenso
-;escreve_palavra 1, 2, 16, quatro, l11, branco_intenso
+while_!q:
+		mov     ax,[p_i]  ; pont p/ int quando pressiona a tecla
+        cmp     ax,[p_t]  ; verifica se soltou a tecla
+        je      while_!q ; se soltou, permanece no loop
+        inc     word[p_t] ; se a tecla estiver pressionada, incrementa
+        and     word[p_t],7 ; pega os três últimos bits de [p_t]
+        mov     bx,[p_t]
+        xor     ax, ax  ; zera AX
+        mov     al, [bx+tecla]  ;
+        mov     [tecla_u],al ; Recebe o código da tecla (depois de solta)
 
-;----------------------------------------------------ESTADO-------------------------------------------------;;
-escreve_palavra 19, 3, 3, estado, l9, branco_intenso
-escreve_palavra 6, 3, 23, parado, l12, branco_intenso
-;escreve_palavra 7, 3, 23, sobe, l12, branco_intenso
-;escreve_palavra 8, 3, 23, desce, l12, branco_intenso
+        cmp     byte [tecla_u], 0A2H ; Codigo da letra G
+        je      emergencia_off ; Desliga a emergencia
+        cmp     byte [status], 2
+        je      while_!q  ; Se estiver em estado de emergencia, fica no loop ate voltar ao normal (apertar a tecla G)
+        cmp     byte [tecla_u], 81h ; 81h é o código gerado ao soltar a tecla ESC
+        je      emergencia_on  ; Liga a emergencia
+        ;cmp     byte [tecla_u], 0B9h ; Codigo da barra de espaco ;;comentei porque esta na funcao calibra
+        ;je      interrompe_elevador ; Para calibracao
+        cmp     byte [tecla_u], 82h; Codigo do 1
+        je      binter_1  ; Botao interno 1
+        cmp     byte [tecla_u], 83h; Codigo do 2
+        je      binter_2  ; Botao interno 2
+        cmp     byte [tecla_u], 84h; Codigo do 3
+        je      binter_3  ; Botao interno 3
+        cmp     byte [tecla_u], 85h; Codigo do 4
+        je      binter_4  ; Botao interno 4
+        cmp     byte [tecla_u], 90h;  Codigo da letra Q
+        je      sair
+        jmp     while_!q
 
-;;-------------------------------------------------------MODO-----------------------------------------------;;
-escreve_palavra 17, 4, 3, modo, l10, branco_intenso
-;escreve_palavra 11, 4, 21, funciona, l13, branco_intenso
-escreve_palavra 10, 4, 21, emerg, l13, vermelho
+emergencia_on:
+        mov byte [status], 0003h
+        mov  dx, int_esc
+        call imprime
+        ; mov dx, [status]  ; conferir o resultado
+        ; call imprime_byte
+        jmp while_!q
+
+emergencia_off:
+        mov byte [status], 01h ; 'subindo' < alterar depois
+        mov dx, int_g
+        call imprime
+        jmp while_!q
+
+; interrompe_elevador:
+;         mov byte [status], 00h ; parado
+;         mov dx, int_barra
+;         call imprime
+;         ; mov dx, [status]
+;         ; call imprime_byte
+;         jmp L1
+
+binter_1:
+        add byte [botoes_internos], 01h
+        mov dx, int_binter1
+        call imprime
+        ; mov dx, [botoes_internos]
+        ; call imprime_byte
+        jmp while_!q
+
+binter_2:
+        add byte [botoes_internos], 02h
+        mov dx, int_binter2
+        call imprime
+        jmp while_!q
+
+binter_3:
+        add byte [botoes_internos], 03h
+        mov dx, int_binter3
+        call imprime
+        jmp while_!q
+
+binter_4:
+        add byte [botoes_internos], 04h
+        mov dx, int_binter4
+        call imprime
+        jmp while_!q
 
 
-escreve_palavra 34, 23, 3, toexit, l3, branco_intenso
-escreve_palavra 43, 24, 3, projetof, l4, branco_intenso
-escreve_palavra 24, 25, 3, emilia, l5, branco_intenso
-escreve_palavra 22, 26, 3, marcela, l6, branco_intenso
-escreve_palavra 24, 27, 3, marcelo, l7, branco_intenso
+imprime:
+        mov     ah, 9 ; coloca a função de imprimir DX no INT 21h
+        int     21h ; imprime o conteúdo de DX (teclasc)
+        ret
 
-;;---------------------------------------------------------CHAMADAS-----------------------------------------;;
+imprime_byte:
+        add dl, '0' ; Transforma o byte em caractere
+        mov ah, 2
+        int 21h
+        mov dl, 13
+        int 21h
+        mov dl, 10
+        int 21h
+        ret
 
-escreve_palavra 8, 25, 54, chama, l14, branco_intenso
-escreve_palavra 8, 25, 68, chama, l15, branco_intenso
-escreve_palavra 8, 26, 54, interna, l16, branco_intenso
-escreve_palavra 8, 26, 68, externa, l17, branco_intenso
+sair: ; Restaura a tabela de interrupção da BIOS
+        mov     dx, int_o
+        call imprime
+        cli
+        xor     ax, ax
+        mov     es, ax
+        mov     ax, [cs_dos]
+        mov     [es:int9*4+2], ax
+        mov     ax, [offset_dos]
+        mov     [es:int9*4], ax
+        mov     ah, 4Ch ; Retorna o controle para o sistema (finaliza o programa)
+        int     21h
 
-;;-------------------------------------------------------MOLDURA---------------------------------------------;;
-linha 10, 470, 10, 10, branco_intenso
-linha 630, 470, 630, 10, branco_intenso
+    	;mov    	ah,08h
+  		;int     21h
+	  	;mov  	ah,0   					; set video mode
+	  	;mov  	al,[modo_anterior]   	; modo anterior
+	    ;int  	10h
+  		;mov     ax,4c00h
+  		;int     21h
+  		
 
-linha 10, 470, 630, 470, branco_intenso
-linha 10, 10, 630, 10, branco_intenso
 
 
-;;--------------------------------------------------------SETAS----------------------------------------------;;
-linha 400, 470, 400, 10, branco_intenso 
-linha 515, 470, 515, 10, branco_intenso
+;;--------------------------------------------------FIM PROGRAMA PRINCIPAL-----------------------------------;;
 
-linha 400, 102, 630, 102, branco_intenso
-linha 400, 194, 630, 194, branco_intenso
-linha 400, 284, 630, 284, branco_intenso
-linha 400, 374, 630, 374, branco_intenso
-;;SETA 1 INFERIOR ESQUERDA
-linha 442, 125, 472, 125, branco_intenso ;h
-linha 442, 125, 442, 145, branco_intenso ;v
-linha 472, 125, 472, 145, branco_intenso ;v
 
-linha 442, 145, 432, 145, branco_intenso ;h
-linha 472, 145, 482, 145, branco_intenso ;h
+;;---------------------------------------------------FUNCOES ADICIONAIS--------------------------------------;;
 
-linha 432, 145, 457, 174, branco_intenso ;t
-linha 482, 145, 457, 174, branco_intenso ;t
-;;SETA 2 INFERIOR DIREITA
-linha 557, 125, 587, 125, branco_intenso ;h
-linha 557, 125, 557, 145, branco_intenso ;h
-linha 587, 125, 587, 145, branco_intenso ;h
+;;Funcao que desenha a moldura da interface
+moldura:
+		pusha
+		pushf
+		linha 10, 470, 10, 10, branco_intenso
+		linha 630, 470, 630, 10, branco_intenso
+		linha 10, 470, 630, 470, branco_intenso
+		linha 10, 10, 630, 10, branco_intenso
+		popf
+		popa
+		ret
+;------------------------------------------------------------------------------------------------------------------------------------
 
-linha 557, 145, 547, 145, branco_intenso ;h
-linha 587, 145, 597, 145, branco_intenso ;h
+;;Funcao que calibra o elevador, colocando-o na posicao inicial, 4 andar
+calibra:
+		pusha
+		pushf
+		mov     byte[init], 0
+		call    escreve_mens_temp
+		mov     dx, 318h                    ;move endereco da porta de saida para dx  
+        xor		al,al						;zera al
+		out		dx,al	                    ;poe 0 na porta 318h
+		mov		dx,319h						;move endereco da porta de entrada 319h(botoesexternos) para dx
+		;inc		al							;PRECISA DISSO?????;Apaga o LED da porta 319H e define a porta 318H como porta de saída
+		out		dx,al						;al passa par dx
+		mov		dx,318h						;move a saida para dx 	
+		mov		al,40h                      ;Comando que manda o elevador SUBIR
+		out		dx,al	
+l18:    
+		cmp     byte[tecla_u], 0B9h ; aguarda ate ser pressionada a tecla espaco para sinalizar que chegou no quarto andar
+		jne     l18
+		mov     byte[contador], 267         ;salvar no contador de giros que chegou no quarto andar 3*89
+		mov     dx, 318h
+		mov     al, 80h
+		out     dx, al                      ;sinal para o elevador descer 
+l19:
+		;aguarda condicao x
+		jne 	l19
 
-linha 547, 145, 572, 174, branco_intenso ;t
-linha 597, 145, 572, 174, branco_intenso ;t
+		mov     dx, 318h
+		mov     al, 00h                     ;sinal para o elevador parar
+		out     dx, al
+		mov 	byte[status], 0             ;variavel de estado do elevador recebe 0 = parado
+		mov     byte[init], 1
+		call    escreve_mens_temp
+		popf
+		popa
+		ret
+;--------------------------------------------------------------------------------------------------------------------------------------------
 
-;;SETA 3 SUPERIOR ESQUERDA
-linha 442, 447, 472, 447, branco_intenso ;h
-linha 442, 447, 442, 427, branco_intenso ;v
-linha 472, 447, 472, 427, branco_intenso ;v
+;;Funcao que escreve Calibrando elevador... e Aperte ESPACO no quarto andar'
+escreve_mens_temp:
+		pusha
+		pushf
+		;;Calibrando elevador
+		mov     cx, 22
+      	mov     bx, 0
+      	mov     dh, 11 ;0-29 vertical
+      	mov 	dl, 31 ;0-079 horizontal
+      	cmp     byte[init], 0
+      	jne     cor_preto ;;se estiver saido da tela de inicio
+      	mov     byte[cor], branco_intenso
 
-linha 442, 427, 432, 427, branco_intenso ;h
-linha 472, 427, 482, 427, branco_intenso ;h
+cor_preto:
+      	mov		byte[cor], preto 
+l1:
+      	call 	cursor
+      	mov 	al, [bx+ calibra]
+      	call 	caracter
+      	inc 	bx
+      	inc 	dl
+      	loop    l1
+		;Aperte ESPACO no quarto andar
+		mov     cx, 29
+      	mov     bx, 0
+      	mov     dh, 12 ;0-29 vertical
+      	mov 	dl, 27 ;0-079 horizontal
+      	cmp     byte[init], 0
+      	jne     cor_preto2
+      	mov		byte[cor], branco_intenso
 
-linha 432, 427, 457, 398, branco_intenso ;t
-linha 482, 427, 457, 398, branco_intenso ;t
+cor_preto2:
+		mov     byte[cor], preto			
 
-;;SETA 4 SUPERIOR DIREITA
-linha 557, 447, 587, 447, branco_intenso ;h
-linha 557, 447, 557, 427, branco_intenso ;v
-linha 587, 447, 587, 427, branco_intenso ;v
+l2:
+      	call 	cursor
+      	mov 	al, [bx+ espaco]
+      	call 	caracter
+      	inc 	bx
+      	inc 	dl
+      	loop    l2
+      	popf
+      	popa
+      	ret
+;-------------------------------------------------------------------------------------------------------------------------------------------------------
 
-linha 557, 427, 547, 427, branco_intenso ;h
-linha 587, 427, 597, 427, branco_intenso ;h
 
-linha 547, 427, 572, 398, branco_intenso ;t
-linha 597, 427, 572, 398, branco_intenso ;t
 
-;;SETA 5 MAIS INFERIOR DIREITA
-linha 442, 229, 442, 249, branco_intenso ;v
-linha 472, 229, 472, 249, branco_intenso ;v
+;-------------------------------------------------------------------------------------------------------------------------------------------------------
+desenha_interface:
+		pusha
+		pushf
+		;;escreve na interface
+		escreve_palavra 12, 2, 3, andar, l8, branco_intenso            ;;escreve andar
+		escreve_palavra 19, 3, 3, estado, l9, branco_intenso		   ;;escreve estado
+		escreve_palavra 17, 4, 3, modo, l10, branco_intenso            ;;escreve modo
+		escreve_palavra 34, 23, 3, toexit, l3, branco_intenso          ;;escreve 'Para sair do programa pressionar Q'
+		escreve_palavra 43, 24, 3, projetof, l4, branco_intenso        ;;escreve 'Projeto Final de Sistemas Embarcados 2017-1'
+		escreve_palavra 24, 25, 3, emilia, l5, branco_intenso          ;;escreve emilia
+		escreve_palavra 22, 26, 3, marcela, l6, branco_intenso		   ;;escreve marcela
+		escreve_palavra 24, 27, 3, marcelo, l7, branco_intenso         ;;escreve marcelo
+		escreve_palavra 8, 25, 54, chama, l14, branco_intenso          ;;escreve 'chamadas' na tabela que contem as setas
+		escreve_palavra 8, 25, 68, chama, l15, branco_intenso          ;;idem
+		escreve_palavra 8, 26, 54, interna, l16, branco_intenso        ;;escreve 'internas' na coluna das setas que sinalizam as chamadas internas
+		escreve_palavra 8, 26, 68, externa, l17, branco_intenso        ;;escreve 'externas' na coluna das setas que sinalizam as chamadas externas
+		;;desenha a tabela das setas
+		linha 400, 470, 400, 10, branco_intenso 
+		linha 515, 470, 515, 10, branco_intenso
+		linha 400, 102, 630, 102, branco_intenso
+		linha 400, 194, 630, 194, branco_intenso
+		linha 400, 284, 630, 284, branco_intenso
+		linha 400, 374, 630, 374, branco_intenso
+		;;desenha setas
+		;;SETA 1 INFERIOR ESQUERDA
+		linha 442, 125, 472, 125, branco_intenso ;h
+		linha 442, 125, 442, 145, branco_intenso ;v
+		linha 472, 125, 472, 145, branco_intenso ;v
 
-linha 442, 229, 432, 229, branco_intenso ;h
-linha 472, 229, 482, 229, branco_intenso ;h
-linha 442, 249, 432, 249, branco_intenso ;h
-linha 472, 249, 482, 249, branco_intenso ;h
+		linha 442, 145, 432, 145, branco_intenso ;h
+		linha 472, 145, 482, 145, branco_intenso ;h
 
-linha 432, 229, 457, 210, branco_intenso ;t
-linha 482, 229, 457, 210, branco_intenso ;t
-linha 432, 249, 457, 268, branco_intenso ;t
-linha 482, 249, 457, 268, branco_intenso ;t
+		linha 432, 145, 457, 174, branco_intenso ;t
+		linha 482, 145, 457, 174, branco_intenso ;t
+		;;SETA 2 INFERIOR DIREITA
+		linha 557, 125, 587, 125, branco_intenso ;h
+		linha 557, 125, 557, 145, branco_intenso ;h
+		linha 587, 125, 587, 145, branco_intenso ;h
 
-;;SETA 6 MAIS SUPERIOR DIREITA
-linha 442, 319, 442, 339, branco_intenso ;v
-linha 472, 319, 472, 339, branco_intenso ;v
+		linha 557, 145, 547, 145, branco_intenso ;h
+		linha 587, 145, 597, 145, branco_intenso ;h
 
-linha 442, 319, 432, 319, branco_intenso ;h
-linha 472, 319, 482, 319, branco_intenso ;h
-linha 442, 339, 432, 339, branco_intenso ;h
-linha 472, 339, 482, 339, branco_intenso ;h
+		linha 547, 145, 572, 174, branco_intenso ;t
+		linha 597, 145, 572, 174, branco_intenso ;t
 
-linha 432, 319, 457, 300, branco_intenso ;t -
-linha 482, 319, 457, 300, branco_intenso ;t
-linha 432, 339, 457, 358, branco_intenso ;t
-linha 482, 339, 457, 358, branco_intenso ;t
+		;;SETA 3 SUPERIOR ESQUERDA
+		linha 442, 447, 472, 447, branco_intenso ;h
+		linha 442, 447, 442, 427, branco_intenso ;v
+		linha 472, 447, 472, 427, branco_intenso ;v
 
-;;SETA 7 MAIS SUPERIOR ESQUERDA
+		linha 442, 427, 432, 427, branco_intenso ;h
+		linha 472, 427, 482, 427, branco_intenso ;h
 
-;seta de cima
-linha 557, 333, 557, 343, branco_intenso ;v
-linha 587, 333, 587, 343, branco_intenso ;v
+		linha 432, 427, 457, 398, branco_intenso ;t
+		linha 482, 427, 457, 398, branco_intenso ;t
 
-linha 557, 333, 587, 333, branco_intenso ;h
+		;;SETA 4 SUPERIOR DIREITA
+		linha 557, 447, 587, 447, branco_intenso ;h
+		linha 557, 447, 557, 427, branco_intenso ;v
+		linha 587, 447, 587, 427, branco_intenso ;v
 
-linha 557, 343, 547, 343, branco_intenso ;h
-linha 587, 343, 597, 343, branco_intenso ;h
+		linha 557, 427, 547, 427, branco_intenso ;h
+		linha 587, 427, 597, 427, branco_intenso ;h
 
-linha 547, 343, 572, 358, branco_intenso ;t
-linha 597, 343, 572, 358, branco_intenso ;t
+		linha 547, 427, 572, 398, branco_intenso ;t
+		linha 597, 427, 572, 398, branco_intenso ;t
 
-;seta de baixo
-linha 557, 325, 557, 315, branco_intenso ;v
-linha 587, 325, 587, 315, branco_intenso ;v
+		;;SETA 5 MAIS INFERIOR DIREITA
+		linha 442, 229, 442, 249, branco_intenso ;v
+		linha 472, 229, 472, 249, branco_intenso ;v
 
-linha 557, 325, 587, 325, branco_intenso ;h
+		linha 442, 229, 432, 229, branco_intenso ;h
+		linha 472, 229, 482, 229, branco_intenso ;h
+		linha 442, 249, 432, 249, branco_intenso ;h
+		linha 472, 249, 482, 249, branco_intenso ;h
 
-linha 557, 315, 547, 315, branco_intenso ;h
-linha 587, 315, 597, 315, branco_intenso ;h
+		linha 432, 229, 457, 210, branco_intenso ;t
+		linha 482, 229, 457, 210, branco_intenso ;t
+		linha 432, 249, 457, 268, branco_intenso ;t
+		linha 482, 249, 457, 268, branco_intenso ;t
 
-linha 547, 315, 572, 300, branco_intenso ;t
-linha 597, 315, 572, 300, branco_intenso ;t
-;;
+		;;SETA 6 MAIS SUPERIOR DIREITA
+		linha 442, 319, 442, 339, branco_intenso ;v
+		linha 472, 319, 472, 339, branco_intenso ;v
 
-;;SETA 8 MAIS INFERIOR ESQUERDA
+		linha 442, 319, 432, 319, branco_intenso ;h
+		linha 472, 319, 482, 319, branco_intenso ;h
+		linha 442, 339, 432, 339, branco_intenso ;h
+		linha 472, 339, 482, 339, branco_intenso ;h
 
-;seta de cima
-linha 557, 243, 557, 253, branco_intenso ;v
-linha 587, 243, 587, 253, branco_intenso ;v
+		linha 432, 319, 457, 300, branco_intenso ;t -
+		linha 482, 319, 457, 300, branco_intenso ;t
+		linha 432, 339, 457, 358, branco_intenso ;t
+		linha 482, 339, 457, 358, branco_intenso ;t
 
-linha 557, 243, 587, 243, branco_intenso ;h
+		;;SETA 7 MAIS SUPERIOR ESQUERDA
 
-linha 557, 253, 547, 253, branco_intenso ;h
-linha 587, 253, 597, 253, branco_intenso ;h
+		;seta de cima
+		linha 557, 333, 557, 343, branco_intenso ;v
+		linha 587, 333, 587, 343, branco_intenso ;v
 
-linha 547, 253, 572, 268, branco_intenso ;t
-linha 597, 253, 572, 268, branco_intenso ;t
+		linha 557, 333, 587, 333, branco_intenso ;h
 
-;seta de baixo
-linha 557, 235, 557, 225, branco_intenso ;v
-linha 587, 235, 587, 225, branco_intenso ;v
+		linha 557, 343, 547, 343, branco_intenso ;h
+		linha 587, 343, 597, 343, branco_intenso ;h
 
-linha 557, 235, 587, 235, branco_intenso ;h
+		linha 547, 343, 572, 358, branco_intenso ;t
+		linha 597, 343, 572, 358, branco_intenso ;t
 
-linha 557, 225, 547, 225, branco_intenso ;h
-linha 587, 225, 597, 225, branco_intenso ;h
+		;seta de baixo
+		linha 557, 325, 557, 315, branco_intenso ;v
+		linha 587, 325, 587, 315, branco_intenso ;v
 
-linha 547, 225, 572, 210, branco_intenso ;t
-linha 597, 225, 572, 210, branco_intenso ;t
+		linha 557, 325, 587, 325, branco_intenso ;h
+
+		linha 557, 315, 547, 315, branco_intenso ;h
+		linha 587, 315, 597, 315, branco_intenso ;h
+
+		linha 547, 315, 572, 300, branco_intenso ;t
+		linha 597, 315, 572, 300, branco_intenso ;t
+		;;
+
+		;;SETA 8 MAIS INFERIOR ESQUERDA
+
+		;seta de cima
+		linha 557, 243, 557, 253, branco_intenso ;v
+		linha 587, 243, 587, 253, branco_intenso ;v
+
+		linha 557, 243, 587, 243, branco_intenso ;h
+
+		linha 557, 253, 547, 253, branco_intenso ;h
+		linha 587, 253, 597, 253, branco_intenso ;h
+
+		linha 547, 253, 572, 268, branco_intenso ;t
+		linha 597, 253, 572, 268, branco_intenso ;t
+
+		;seta de baixo
+		linha 557, 235, 557, 225, branco_intenso ;v
+		linha 587, 235, 587, 225, branco_intenso ;v
+
+		linha 557, 235, 587, 235, branco_intenso ;h
+
+		linha 557, 225, 547, 225, branco_intenso ;h
+		linha 587, 225, 597, 225, branco_intenso ;h
+
+		linha 547, 225, 572, 210, branco_intenso ;t
+		linha 597, 225, 572, 210, branco_intenso ;t
+		popf
+		popa
+		ret
+;----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
 
 ;------------------------------------------------------------------
-  		mov    	ah,08h
-  		int     21h
-  	  	mov  	ah,0   					; set video mode
-  	  	mov  	al,[modo_anterior]   	; modo anterior
-      	int  	10h
-  		mov     ax,4c00h
-  		int     21h
+  		
 
-;---------------------------------------------------------------------------------------------------------
-
-
+;--------------------------------------------FUNCOES DO ARQUIVO LINEC.ASM-------------------------------------------------------------
 ;   funcao cursor
 ;
 ; dh = linha (0-29) e  dl=coluna  (0-79)
 cursor:
 		pushf
-		push 		ax
-		push 		bx
-		push		cx
-		push		dx
-		push		si
-		push		di
-		push		bp
-		mov     	ah,2
-		mov     	bh,0
-		int     	10h
+		push 	ax
+		push 	bx
+		push	cx
+		push	dx
+		push	si
+		push	di
+		push	bp
+		mov    	ah,2
+		mov    	bh,0
+		int    	10h
 		pop		bp
 		pop		di
 		pop		si
@@ -265,9 +481,9 @@ cursor:
 		pop		ax
 		popf
 		ret
-;_____________________________________________________________________________
+
 ;
-;   funcaoo caracter escrito na posicao do cursor
+;funcaoo caracter escrito na posicao do cursor
 ;
 ; al= caracter a ser escrito
 ; cor definida na variavel cor
@@ -280,11 +496,11 @@ caracter:
 		push		si
 		push		di
 		push		bp
-    		mov     	ah,9
-    		mov     	bh,0
-    		mov     	cx,1
+    	mov     	ah,9
+    	mov     	bh,0
+   		mov     	cx,1
    		mov     	bl,[cor]
-    		int     	10h
+    	int     	10h
 		pop		bp
 		pop		di
 		pop		si
@@ -470,7 +686,7 @@ fim_circle:
 	pop		bp
 	ret		6
 ;-----------------------------------------------------------------------------
-;    fun��o full_circle
+;    funcaoo full_circle
 ;	 push xc; push yc; push r; call full_circle;  (xc+r<639,yc+r<479)e(xc-r>0,yc-r>0)
 ; cor definida na variavel cor
 full_circle:
@@ -600,7 +816,7 @@ plotar_full:
 	ret			6
 ;-----------------------------------------------------------------------------
 ;
-;   fun��o line
+;   funcaoo line
 ;
 ; push x1; push y1; push x2; push y2; call line;  (x<639, y<479)
 line:
@@ -758,33 +974,96 @@ fim_line:
 		popf
 		pop		bp
 		ret		8
-;*******************************************************************
+
+;;----------------------------------------------------FIM FUNCOES DO ARQUIVO LINEC.ASM-----------------------------------------;;		
+
+;;---------------------------------------------------FUNCAO KEYINT DO ARQUIVO TECBUF.ASM---------------------------------------;;
+keyint:
+; Guarda os valores antigos
+        push    ax
+        push    bx
+        push    ds
+; Define os novos
+        mov     ax,data ; segment data
+        mov     ds,ax
+        in      al, kb_data ; Lê do teclado
+        inc     word [p_i]  ; incrementa quando pressiona a tecla
+        and     word [p_i],7
+        mov     bx,[p_i] ; Coloca os três primeiros bits de [p_i] em BX
+        mov     [bx+tecla],al ; Guarda o código da tecla pressionada
+        in      al, kb_ctl
+        or      al, 80h ; Pega os 4 últimos bits de AL
+        out     kb_ctl, al
+        and     al, 7Fh ; Pega os 7 primeiros bits de AL
+        out     kb_ctl, al
+        mov     al, eoi
+        out     pictrl, al
+; Restaura os valores anteriores
+        pop     ds
+        pop     bx
+        pop     ax
+        iret
+
+;;----------------------------------------------------SEGUIMENTO DE DADOS--------------------------------------------------------;;
 segment data
 
-cor		db		branco_intenso
+;;DECLARACAO DAS CORES;;
 
-preto		equ		0
-azul		equ		1
-verde		equ		2
-cyan		equ		3
-vermelho	equ		4
-magenta		equ		5
-marrom		equ		6
-branco		equ		7
-cinza		equ		8
-azul_claro	equ		9
-verde_claro	equ		10
-cyan_claro	equ		11
-rosa		equ		12
+cor		    	db		branco_intenso
+preto			equ		0
+azul			equ		1
+verde			equ		2
+cyan			equ		3
+vermelho		equ		4
+magenta			equ		5
+marrom			equ		6
+branco			equ		7
+cinza			equ		8
+azul_claro		equ		9
+verde_claro		equ		10
+cyan_claro		equ		11
+rosa			equ		12
 magenta_claro	equ		13
-amarelo		equ		14
+amarelo		    equ		14
 branco_intenso	equ		15
 
+;;VARIAVEIS USADAS NA INTERRUPCAO DO TECLADO
+
+kb_data          equ    60h  ;PORTA DE LEITURA DE TECLADO - pega o código da tecla
+kb_ctl           equ    61h  ;PORTA DE RESET PARA PEDIR NOVA INTERRUPCAO
+pictrl           equ    20h  ; finaliza operação do sistema
+eoi              equ    20h   ; finaliza operação do sistema
+int9             equ    9h  ; 09h é interrupção de teclado
+cs_dos           dw     1
+offset_dos       dw     1
+tecla_u          db     0
+tecla            resb   8
+p_i              dw     0   ;ponteiro p/ interrupcao (qnd pressiona tecla)
+p_t              dw     0   ;ponterio p/ interrupcao ( qnd solta tecla)
+teclasc          db     0,0,13,10,'$'
+status           db     0 ; 0: parado; 1: descendo; 2: subindo; 3: emergencia ativado
+int_o            db     'Q: saindo do programa', 13, 10, '$'
+int_esc          db     'ESC: emergencia ligado', 13, 10, '$'
+int_g            db     'G: emergencia desativado', 13, 10, '$'
+int_barra        db     'BARRA DE ESPACO: calibracao', 13, 10, '$'
+int_binter1      db     'Botao interno 1', 13, 10, '$'
+int_binter2      db     'Botao interno 2', 13, 10, '$'
+int_binter3      db     'Botao interno 3', 13, 10, '$'
+int_binter4      db     'Botao interno 4', 13, 10, '$'
+botoes_externos  db     00h ; 0001: B1 | 0010: B2 | 0100: B3 | 0100: B4 | 0001 0000: B5 | 0010 0000: B6
+botoes_internos  db     00h ; 0001: I1 | 0010: I2 | 0100: I3 | 0100: I4
+
+contador         db     0
+init             db     0 ;;byte para determinar se ja saiu da tela de inicio 0 = nao, 1 = sim
+
+
 modo_anterior	db		0
-linha   	dw  		0
-coluna  	dw  		0
-deltax		dw		    0
-deltay		dw		    0
+linha   		dw  	0
+coluna  		dw  	0
+deltax			dw	    0
+deltay			dw	    0
+
+;;DECLARACAO DAS MENSAGENS A IMPRIMIR
 
 calibra     db          'Calibrando elevador...'
 espaco      db          'Aperte ESPACO no quarto andar'
@@ -815,3 +1094,177 @@ externa     db          'EXTERNAS'
 segment stack stack
     		resb 		512
 stacktop:
+
+
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;; MACROS DA INTERFACE, DEIXEI AQUI POR PRECAUCAO, NAO APAGUE;;;;;;;;;;;;;
+;;------------------------------------------------CALIBRANDO-------------------------------------------------;;
+; escreve_palavra 22, 11, 31, calibra, l1, branco_intenso
+; ;escreve_palavra 29, 12, 27, espaco, l2, branco_intenso
+
+; ;;-----------------------------------------------------ANDAR------------------------------------------------;;
+;escreve_palavra 12, 2, 3, andar, l8, branco_intenso
+;escreve_palavra 1, 2, 16, um, l11, branco_intenso
+;escreve_palavra 1, 2, 16, dois, l11, branco_intenso
+;escreve_palavra 1, 2, 16, tres, l11, branco_intenso
+;escreve_palavra 1, 2, 16, quatro, l11, branco_intenso
+
+;----------------------------------------------------ESTADO-------------------------------------------------;;
+;escreve_palavra 19, 3, 3, estado, l9, branco_intenso
+;escreve_palavra 6, 3, 23, parado, l12, branco_intenso
+;escreve_palavra 7, 3, 23, sobe, l12, branco_intenso
+;escreve_palavra 8, 3, 23, desce, l12, branco_intenso
+
+;;-------------------------------------------------------MODO-----------------------------------------------;;
+;escreve_palavra 17, 4, 3, modo, l10, branco_intenso
+;escreve_palavra 11, 4, 21, funciona, l13, branco_intenso
+;escreve_palavra 10, 4, 21, emerg, l13, vermelho
+
+
+; escreve_palavra 34, 23, 3, toexit, l3, branco_intenso
+; escreve_palavra 43, 24, 3, projetof, l4, branco_intenso
+; escreve_palavra 24, 25, 3, emilia, l5, branco_intenso
+; escreve_palavra 22, 26, 3, marcela, l6, branco_intenso
+; escreve_palavra 24, 27, 3, marcelo, l7, branco_intenso
+
+;;---------------------------------------------------------CHAMADAS-----------------------------------------;;
+
+; escreve_palavra 8, 25, 54, chama, l14, branco_intenso
+; escreve_palavra 8, 25, 68, chama, l15, branco_intenso
+; escreve_palavra 8, 26, 54, interna, l16, branco_intenso
+; escreve_palavra 8, 26, 68, externa, l17, branco_intenso
+
+;;-------------------------------------------------------MOLDURA---------------------------------------------;;
+; linha 10, 470, 10, 10, branco_intenso
+; linha 630, 470, 630, 10, branco_intenso
+
+; linha 10, 470, 630, 470, branco_intenso
+; linha 10, 10, 630, 10, branco_intenso
+
+; ;;SETA 1 INFERIOR ESQUERDA
+; linha 442, 125, 472, 125, branco_intenso ;h
+; linha 442, 125, 442, 145, branco_intenso ;v
+; linha 472, 125, 472, 145, branco_intenso ;v
+
+; linha 442, 145, 432, 145, branco_intenso ;h
+; linha 472, 145, 482, 145, branco_intenso ;h
+
+; linha 432, 145, 457, 174, branco_intenso ;t
+; linha 482, 145, 457, 174, branco_intenso ;t
+; ;;SETA 2 INFERIOR DIREITA
+; linha 557, 125, 587, 125, branco_intenso ;h
+; linha 557, 125, 557, 145, branco_intenso ;h
+; linha 587, 125, 587, 145, branco_intenso ;h
+
+; linha 557, 145, 547, 145, branco_intenso ;h
+; linha 587, 145, 597, 145, branco_intenso ;h
+
+; linha 547, 145, 572, 174, branco_intenso ;t
+; linha 597, 145, 572, 174, branco_intenso ;t
+
+; ;;SETA 3 SUPERIOR ESQUERDA
+; linha 442, 447, 472, 447, branco_intenso ;h
+; linha 442, 447, 442, 427, branco_intenso ;v
+; linha 472, 447, 472, 427, branco_intenso ;v
+
+; linha 442, 427, 432, 427, branco_intenso ;h
+; linha 472, 427, 482, 427, branco_intenso ;h
+
+; linha 432, 427, 457, 398, branco_intenso ;t
+; linha 482, 427, 457, 398, branco_intenso ;t
+
+; ;;SETA 4 SUPERIOR DIREITA
+; linha 557, 447, 587, 447, branco_intenso ;h
+; linha 557, 447, 557, 427, branco_intenso ;v
+; linha 587, 447, 587, 427, branco_intenso ;v
+
+; linha 557, 427, 547, 427, branco_intenso ;h
+; linha 587, 427, 597, 427, branco_intenso ;h
+
+; linha 547, 427, 572, 398, branco_intenso ;t
+; linha 597, 427, 572, 398, branco_intenso ;t
+
+; ;;SETA 5 MAIS INFERIOR DIREITA
+; linha 442, 229, 442, 249, branco_intenso ;v
+; linha 472, 229, 472, 249, branco_intenso ;v
+
+; linha 442, 229, 432, 229, branco_intenso ;h
+; linha 472, 229, 482, 229, branco_intenso ;h
+; linha 442, 249, 432, 249, branco_intenso ;h
+; linha 472, 249, 482, 249, branco_intenso ;h
+
+; linha 432, 229, 457, 210, branco_intenso ;t
+; linha 482, 229, 457, 210, branco_intenso ;t
+; linha 432, 249, 457, 268, branco_intenso ;t
+; linha 482, 249, 457, 268, branco_intenso ;t
+
+; ;;SETA 6 MAIS SUPERIOR DIREITA
+; linha 442, 319, 442, 339, branco_intenso ;v
+; linha 472, 319, 472, 339, branco_intenso ;v
+
+; linha 442, 319, 432, 319, branco_intenso ;h
+; linha 472, 319, 482, 319, branco_intenso ;h
+; linha 442, 339, 432, 339, branco_intenso ;h
+; linha 472, 339, 482, 339, branco_intenso ;h
+
+; linha 432, 319, 457, 300, branco_intenso ;t -
+; linha 482, 319, 457, 300, branco_intenso ;t
+; linha 432, 339, 457, 358, branco_intenso ;t
+; linha 482, 339, 457, 358, branco_intenso ;t
+
+; ;;SETA 7 MAIS SUPERIOR ESQUERDA
+
+; ;seta de cima
+; linha 557, 333, 557, 343, branco_intenso ;v
+; linha 587, 333, 587, 343, branco_intenso ;v
+
+; linha 557, 333, 587, 333, branco_intenso ;h
+
+; linha 557, 343, 547, 343, branco_intenso ;h
+; linha 587, 343, 597, 343, branco_intenso ;h
+
+; linha 547, 343, 572, 358, branco_intenso ;t
+; linha 597, 343, 572, 358, branco_intenso ;t
+
+; ;seta de baixo
+; linha 557, 325, 557, 315, branco_intenso ;v
+; linha 587, 325, 587, 315, branco_intenso ;v
+
+; linha 557, 325, 587, 325, branco_intenso ;h
+
+; linha 557, 315, 547, 315, branco_intenso ;h
+; linha 587, 315, 597, 315, branco_intenso ;h
+
+; linha 547, 315, 572, 300, branco_intenso ;t
+; linha 597, 315, 572, 300, branco_intenso ;t
+; ;;
+
+; ;;SETA 8 MAIS INFERIOR ESQUERDA
+
+; ;seta de cima
+; linha 557, 243, 557, 253, branco_intenso ;v
+; linha 587, 243, 587, 253, branco_intenso ;v
+
+; linha 557, 243, 587, 243, branco_intenso ;h
+
+; linha 557, 253, 547, 253, branco_intenso ;h
+; linha 587, 253, 597, 253, branco_intenso ;h
+
+; linha 547, 253, 572, 268, branco_intenso ;t
+; linha 597, 253, 572, 268, branco_intenso ;t
+
+; ;seta de baixo
+; linha 557, 235, 557, 225, branco_intenso ;v
+; linha 587, 235, 587, 225, branco_intenso ;v
+
+; linha 557, 235, 587, 235, branco_intenso ;h
+
+; linha 557, 225, 547, 225, branco_intenso ;h
+; linha 587, 225, 597, 225, branco_intenso ;h
+
+; linha 547, 225, 572, 210, branco_intenso ;t
+; linha 597, 225, 572, 210, branco_intenso ;t
