@@ -92,16 +92,17 @@ while_!q:
         je      while_!q  ; Se estiver em estado de emergencia, fica no loop ate voltar ao normal (apertar a tecla G)
         cmp     byte [tecla_u], 81h ; 81h é o código gerado ao soltar a tecla ESC
         je      emergencia_on  ; Liga a emergencia
+        call    verifica_botao_interno
         ;cmp     byte [tecla_u], 0B9h ; Codigo da barra de espaco ;;comentei porque esta na funcao calibra
         ;je      interrompe_elevador ; Para calibracao
-        cmp     byte [tecla_u], 82h; Codigo do 1
-        je      binter_1  ; Botao interno 1
-        cmp     byte [tecla_u], 83h; Codigo do 2
-        je      binter_2  ; Botao interno 2
-        cmp     byte [tecla_u], 84h; Codigo do 3
-        je      binter_3  ; Botao interno 3
-        cmp     byte [tecla_u], 85h; Codigo do 4
-        je      binter_4  ; Botao interno 4
+        ; cmp     byte [tecla_u], 82h; Codigo do 1
+        ; je      binter_1  ; Botao interno 1
+        ; cmp     byte [tecla_u], 83h; Codigo do 2
+        ; je      binter_2  ; Botao interno 2
+        ; cmp     byte [tecla_u], 84h; Codigo do 3
+        ; je      binter_3  ; Botao interno 3
+        ; cmp     byte [tecla_u], 85h; Codigo do 4
+        ; je      binter_4  ; Botao interno 4
         cmp     byte [tecla_u], 90h;  Codigo da letra Q
         je      sair
         jmp     while_!q
@@ -128,31 +129,31 @@ emergencia_off:
 ;         ; call imprime_byte
 ;         jmp L1
 
-binter_1:
-        add byte [botoes_internos], 01h
-        mov dx, int_binter1
-        call imprime
-        ; mov dx, [botoes_internos]
-        ; call imprime_byte
-        jmp while_!q
+; binter_1:
+;         add byte [botoes_internos], 01h
+;         mov dx, int_binter1
+;         call imprime
+;         ; mov dx, [botoes_internos]
+;         ; call imprime_byte
+;         jmp while_!q
 
-binter_2:
-        add byte [botoes_internos], 02h
-        mov dx, int_binter2
-        call imprime
-        jmp while_!q
+; binter_2:
+;         add byte [botoes_internos], 02h
+;         mov dx, int_binter2
+;         call imprime
+;         jmp while_!q
 
-binter_3:
-        add byte [botoes_internos], 03h
-        mov dx, int_binter3
-        call imprime
-        jmp while_!q
+; binter_3:
+;         add byte [botoes_internos], 03h
+;         mov dx, int_binter3
+;         call imprime
+;         jmp while_!q
 
-binter_4:
-        add byte [botoes_internos], 04h
-        mov dx, int_binter4
-        call imprime
-        jmp while_!q
+; binter_4:
+;         add byte [botoes_internos], 04h
+;         mov dx, int_binter4
+;         call imprime
+;         jmp while_!q
 
 
 imprime:
@@ -198,6 +199,40 @@ sair: ; Restaura a tabela de interrupção da BIOS
 
 
 ;;---------------------------------------------------FUNCOES ADICIONAIS--------------------------------------;;
+
+;;Funcao que verifica quais botoes internos foram pressionados
+verifica_botao_interno:
+		pusha
+		pushf
+
+		cmp     byte [tecla_u], 82h; Codigo do 1
+        jne     bi2
+        mov     byte[ibotao1], 1
+
+        ;;je      binter_1  ; Botao interno 1
+bi2:   
+ 		cmp     byte [tecla_u], 83h; Codigo do 2
+        jne     bi3  ; Botao interno 2
+        mov     byte[ibotao2], 1;
+
+bi3
+        cmp     byte [tecla_u], 84h; Codigo do 3
+        jne     bi4 ; Botao interno 3
+        mov     byte[ibotao3], 1
+
+bi4:        
+        cmp     byte [tecla_u], 85h; Codigo do 4
+        jne     saiibotao  ; Botao interno 4
+        mov     byte[ibotao4], 1
+
+saiibotao:
+		popf
+		popa
+		ret
+;-----------------------------------------------------------------------------------------------------------------;;
+
+
+
 
 ;;Funcao que desenha a moldura da interface
 moldura:
@@ -1055,6 +1090,13 @@ botoes_internos  db     00h ; 0001: I1 | 0010: I2 | 0100: I3 | 0100: I4
 
 contador         db     0
 init             db     0 ;;byte para determinar se ja saiu da tela de inicio 0 = nao, 1 = sim
+
+;;botoes internos 
+ibotao1          db     0 ;;0:desativada, 1:ativada
+ibotao2          db     0
+ibotao3          db     0
+ibotao4          db     0
+
 
 
 modo_anterior	db		0
