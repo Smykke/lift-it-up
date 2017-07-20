@@ -171,13 +171,13 @@ segment data
         teclasc db  0,0,13,10,'$'
         status  db  0 ; 0: parado; 1: descendo; 2: subindo; 3: emergencia ativado
         int_o   db  'Q: saindo do programa', 13, 10, '$'
-        int_esc    db  'ESC: emergencia ligado', 13, 10, '$'
-        int_g    db  'G: emergencia desativado', 13, 10, '$'
-        int_barra  db  'BARRA DE ESPACO: calibracao', 13, 10, '$'
-        int_binter1  db  'Botao interno 1', 13, 10, '$'
-        int_binter2  db  'Botao interno 2', 13, 10, '$'
-        int_binter3  db  'Botao interno 3', 13, 10, '$'
-        int_binter4  db  'Botao interno 4', 13, 10, '$'
+        int_esc          db  'ESC: emergencia ligado', 13, 10, '$'
+        int_g            db  'G: emergencia desativado', 13, 10, '$'
+        int_barra        db  'BARRA DE ESPACO: calibracao', 13, 10, '$'
+        int_binter1      db  'Botao interno 1', 13, 10, '$'
+        int_binter2      db  'Botao interno 2', 13, 10, '$'
+        int_binter3      db  'Botao interno 3', 13, 10, '$'
+        int_binter4      db  'Botao interno 4', 13, 10, '$'
         botoes_externos  db  00h ; 0001: B1 | 0010: B2 | 0100: B3 | 0100: B4 | 0001 0000: B5 | 0010 0000: B6
         botoes_internos  db  00h ; 0001: I1 | 0010: I2 | 0100: I3 | 0100: I4
 
